@@ -20,6 +20,8 @@ const STRINGS = {
   warnGaps: 'Annonsen efterfrågar något du inte har enligt profilen: {gaps}. Brevet säger det öppet. Kontrollera att formuleringen känns rätt för dig.',
   warnMentions: 'Brevet nämner {items}, som inte finns i din profil. Ta bort det om du inte har den kunskapen.',
   warnRemoved: 'Meningar som påstod att du kan {items} togs bort, eftersom det inte finns i din profil. Läs igenom att brevet hänger ihop.',
+  warnLanguage: 'Annonsen är på {asked}, men modellen skrev brevet på {got}. Hela brevet är därför på {got}. Vill du ha det på {asked}, skicka formuläret igen.',
+  languageNames: { sv: 'svenska', en: 'engelska' },
 };
 const LETTER = {
   sv: { hello: 'Hej,', regards: 'Med vänliga hälsningar', application: 'Ansökan', reference: 'Referens', locale: 'sv-SE',
@@ -35,7 +37,6 @@ const C = p.coverLetter;
 // Any entry in STRINGS can be overridden per person with coverLetter.strings
 Object.assign(STRINGS, C.strings || {});
 const K = C.contact || { name: p.name, town: '', phone: '', email: '' };
-const L = LETTER[b.language] || LETTER.sv;
 const fill = (t, v) => String(t || '').replace(/\{(\w+)\}/g, (m, k) => (k in v ? v[k] : m));
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 const asList = x => Array.isArray(x) ? x : (x ? [x] : []);
@@ -56,6 +57,23 @@ const raw = String($input.first().json.text || '')
   .trim();
 let parts = null;
 try { parts = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch (e) {}
+
+// ----- Which language did the model actually write in? -----
+// If it ignored the instruction, the whole letter follows the model (header, honest sentence, closing),
+// so the letter is never half Swedish, half English. The person is told.
+const languageOf = text => {
+  const w = String(text).toLowerCase().match(/[a-zåäö]+/g) || [];
+  const EN = ['the', 'and', 'you', 'with', 'we', 'our', 'will', 'for', 'are', 'of', 'your', 'to', 'i', 'my', 'have', 'in'];
+  const SV = ['och', 'att', 'du', 'med', 'vi', 'som', 'för', 'är', 'på', 'av', 'din', 'till', 'jag', 'min', 'har', 'i'];
+  const en = w.filter(x => EN.includes(x)).length, sv = w.filter(x => SV.includes(x)).length;
+  return en + sv < 5 ? null : (en > sv ? 'en' : 'sv');
+};
+const written = parts ? languageOf(['inledning', 'matchning', 'bidrag', 'utveckling', 'avslutning']
+  .flatMap(f => [].concat(parts[f] || [])).join(' ')) : null;
+const language = written || b.language;
+const switched = !!written && written !== b.language;
+const L = LETTER[language] || LETTER.sv;
+const honestSentence = (b.honestByLanguage || {})[language] ?? b.honestSentence;
 
 // ----- Clean the language (Swedish) -----
 const clean = s => String(s || '')
@@ -138,7 +156,7 @@ if (b.outOfField) {
   for (let i = 0; i < contribution.length; i++) contribution[i] = dropMissing(dropExamples(contribution[i]));
   if (glimt && contribution.length) contribution[contribution.length - 1] = `${contribution[contribution.length - 1]} ${glimt}`;
   else if (glimt) contribution.push(glimt);
-  const matching = [b.honestSentence, parts.matchning].filter(Boolean).join(' ');
+  const matching = [honestSentence, parts.matchning].filter(Boolean).join(' ');
 
   const paragraphs = [
     parts.inledning,
@@ -161,7 +179,7 @@ if (b.outOfField) {
   letterData = {
     name: K.name, town: K.town, phone: K.phone, email: K.email,
     employer, date, title: b.title, reference: b.reference, paragraphs,
-    language: b.language, hello: L.hello, regards: L.regards, application: L.application, referenceLabel: L.reference
+    language, hello: L.hello, regards: L.regards, application: L.application, referenceLabel: L.reference
   };
   letterHtml = `
   <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:28px"><tr>
@@ -182,12 +200,13 @@ const warnings = [];
 if (!b.outOfField && (b.gaps || []).length) warnings.push(fill(STRINGS.warnGaps, { gaps: b.gaps.join(STRINGS.gapSeparator ?? '; ') }));
 if (letterData) {
   // Mentions of skills from the list that the profile doesn't have (the code's own sentence and the job title don't count)
-  const text = [b.honestSentence, b.title].filter(Boolean)
+  const text = [honestSentence, b.title].filter(Boolean)
     .reduce((t, x) => t.split(x).join(' '), letterData.paragraphs.join(' '));
   const mentioned = skillRes.filter(s => s.re.test(text) && !s.re.test(b.profileFacts)).map(s => s.name);
   if (mentioned.length) warnings.push(fill(STRINGS.warnMentions, { items: mentioned.join(', ') }));
 }
 if (removed.length) warnings.push(fill(STRINGS.warnRemoved, { items: [...new Set(removed)].join(', ') }));
+if (switched) warnings.push(fill(STRINGS.warnLanguage, { asked: STRINGS.languageNames[b.language], got: STRINGS.languageNames[language] }));
 
 const box = (title, items, bg, border, colour = '#222') => items.length
   ? `<div style="background:${bg};border-left:4px solid ${border};padding:10px 14px;margin:0 0 16px;font-size:13px;color:${colour}"><b>${esc(title)}</b><ul style="margin:6px 0 0 18px;padding:0">${items.map(v => `<li>${esc(v)}</li>`).join('')}</ul></div>`

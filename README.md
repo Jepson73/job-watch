@@ -18,7 +18,7 @@ This is not a ready-to-run app. It is two n8n workflows you install on your own 
 - **n8n**, self-hosted (Docker is easiest), running continuously so the schedule and the form work. Cloud n8n does not work, because the workflows read profile files from disk.
 - **An LLM for writing** the cover letters and the daily thought. By default that is a local model through [Ollama](https://ollama.com/), but any provider n8n has a chat model node for works (see [Using another LLM provider](#using-another-llm-provider)).
 - **An embedding model** for ranking ads. By default that is `bge-m3` in Ollama; any OpenAI-compatible embeddings API also works.
-- **Hardware for local models**, if you run them yourself: a GPU with about 12 GB of memory is comfortable for 12–14B chat models. Smaller models need less but write worse letters. Embeddings alone run fine on a CPU.
+- **Hardware for local models**, if you run them yourself: a GPU with about 12 GB of memory runs `gemma3:12b` with a 12288-token context fully on the GPU; on 8 GB part of it runs on the CPU, which works but is slower. Smaller models need less but write worse letters. Embeddings alone run fine on a CPU.
 - **API keys** (free tiers are enough): [Trafiklab ResRobot](https://www.trafiklab.se/api/our-apis/resrobot-v21/) for public transport and [OpenRouteService](https://openrouteservice.org/) for driving times. JobTech's ad API needs no key.
 - **An email account with SMTP access** to send the emails, for example Gmail with an app password.
 - **Python 3** to build the workflow files from the code, and **Node.js** only if you want to run the tests.
@@ -147,10 +147,9 @@ n8n does not read a `.env` file for this project. API keys are stored as **crede
 | What | Notes |
 |---|---|
 | Self-hosted n8n (Docker) | Must be able to read the profile folder (see Install) |
-| Ollama, reachable from n8n | With the three models below, or another provider (next section) |
+| Ollama, reachable from n8n | With the two models below, or another provider (next section) |
 | `bge-m3` | Embeddings for ranking ads (Job watch) |
-| `qwen3:14b` | The daily thought (Job watch). Any chat model works; change it in the *Thought model* node |
-| `gemma3:12b` | Writing the letters (Cover letter). Change it in the *Letter model* node |
+| `gemma3:12b` | Writes the letters (*Letter model*) and the daily thought (*Thought model*). Both nodes use the same model and context length (12288), so Ollama keeps one model loaded instead of swapping. If you change one, change both |
 
 ### Credentials to create in n8n
 

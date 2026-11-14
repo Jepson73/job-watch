@@ -7,11 +7,17 @@ const answers = $input.all().map(i => i.json);
 const sd = $getWorkflowStaticData('global');
 sd.thoughts ??= {};
 
+// The thought must be Swedish: if the model slips into English, skip it that day rather than send Swenglish.
+const ENGLISH = /\b(take|the|you|your|step|steps|don't|it's|every|today|keep|just do|journey|will|with|yourself|and)\b/i;
+
 return emails.map((e, i) => {
-  const thought = e.hasThought ? String(answers[i]?.text || '')
+  let thought = e.hasThought ? String(answers[i]?.text || '')
     .replace(/<think>[\s\S]*?<\/think>/g, '')
     .replace(/^["“”'\s]+|["“”'\s]+$/g, '')
+    .replace(/\s*[–—]\s*/g, ', ')     // dashes become commas, like in the letters
+    .replace(/,\s*([.!?])/g, '$1')
     .trim() : '';
+  if (ENGLISH.test(thought)) thought = '';
 
   if (thought) sd.thoughts[e.person] = [...(sd.thoughts[e.person] || []), thought].slice(-30);
 

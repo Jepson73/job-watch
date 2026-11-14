@@ -126,7 +126,8 @@ code('Compose email', '14_compose_email.js')
 node('Daily thought', '@n8n/n8n-nodes-langchain.chainLlm', 1.9,
      {'promptType': 'define', 'text': '={{ $json.thoughtPrompt }}', 'batching': {}}, onError='continueRegularOutput')
 node('Thought model', '@n8n/n8n-nodes-langchain.lmChatOllama', 1,
-     {'model': 'qwen3:14b', 'options': {'temperature': 0.9}}, credentials=CRED['ollama'])
+     # Same model and context length as the letters, so Ollama keeps one model loaded instead of swapping
+     {'model': 'gemma3:12b', 'options': {'temperature': 0.9, 'numCtx': 12288}}, credentials=CRED['ollama'])
 code('Add thought', '15_add_thought.js')
 node('Send email', 'n8n-nodes-base.emailSend', 2.1, {
     'fromEmail': '={{ $json.from }}', 'toEmail': '={{ $json.to }}',
@@ -176,7 +177,7 @@ print('wrote', out, len(nodes), 'nodes')
 # =====================================================================
 FOLDER = 'cover-letter'
 nodes, conns = [], {}
-node('Cover letter form', 'n8n-nodes-base.formTrigger', 2.2, {
+node('Cover letter form', 'n8n-nodes-base.formTrigger', 2.6, {
     'formTitle': 'Personligt brev',
     'formDescription': 'Skriv gärna några ord om vad som lockar dig med tjänsten ovan, så blir brevet mer personligt. Utkastet kommer till din mejl inom några minuter.',
     'formFields': {'values': [

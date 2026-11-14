@@ -49,19 +49,22 @@ const profileFacts = fill(C.profile, vars);
 const MS = C.missingSkills || { items: [] };
 const skillList = (MS.items || []).map(s => ({ ...s, regex: new RegExp(s.re, s.flags ?? '') }));
 const missing = skillList.filter(s => s.regex.test(ad));
-let honestSentence = '';
-if (missing.length) {
-  const S = (MS.sentences || {})[language] || (MS.sentences || {}).sv || {};
+// Built for both languages: if the model writes in the other language, "Build email" switches to that one
+const honestFor = lang => {
+  if (!missing.length) return '';
+  const S = (MS.sentences || {})[lang] || (MS.sentences || {}).sv || {};
   const studied = missing.filter(s => s.studied).map(s => s.name);
   const never = missing.filter(s => !s.studied).map(s => s.name);
   // {it} becomes "it" or "them" (S.it / S.them) depending on how many skills there are
   const pronoun = n => n > 1 ? (S.them || '') : (S.it || '');
-  honestSentence = [
+  return [
     studied.length && S.studied ? capital(fill(S.studied, { items: joinList(studied, S.and || 'och'), it: pronoun(studied.length) })) : '',
     never.length && S.never ? capital(fill(S.never, { items: joinList(never, S.or || S.and || 'och'), it: pronoun(never.length) })) : '',
     S.after || ''
   ].filter(Boolean).join(' ');
-}
+};
+const honestSentence = honestFor(language);
+const honestByLanguage = { sv: honestFor('sv'), en: honestFor('en') };
 
 // ===== Gaps: what the ad asks for that the person doesn't have =====
 const gaps = [];
@@ -87,6 +90,12 @@ const profile = profileFacts + gapSection + employerSection + extra;
 const remote = C.remoteRe ? RE(C.remoteRe).test(ad) : false;
 const motivation = (d.motivation || '').trim() || C.motivationDefault || '';
 
+// Models follow the last instruction best, and the Swedish JSON field names pull them towards Swedish.
+const REMINDER = {
+  en: 'VIKTIGT OM SPRÅKET: Annonsen är på engelska. Skriv ALL text i JSON-fälten på engelska (brittisk stavning), även om fältnamnen är på svenska. Bara "tips" skrivs på svenska.',
+};
+const reminder = C.languageReminder?.[language] ?? REMINDER[language] ?? '';
+
 const prompt = fill(C.prompt, {
   profile,
   style: C.style || '',
@@ -94,7 +103,7 @@ const prompt = fill(C.prompt, {
   motivation,
   languageName: (C.languageNames || {})[language] || (language === 'en' ? 'engelska' : 'svenska'),
   remote: remote ? 'ja' : 'nej'
-});
+}) + (reminder ? '\n\n' + reminder : '');
 
 return [{ json: {
   ...d,
@@ -105,5 +114,6 @@ return [{ json: {
   profileFacts,
   gaps: gaps.map(g => g.name),
   missingSkills: missing.map(s => s.name),
-  honestSentence
+  honestSentence,
+  honestByLanguage
 } }];
