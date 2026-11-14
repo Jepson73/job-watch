@@ -35,7 +35,10 @@ for (const [idx, item] of $input.all().entries()) {
   const p = people[prep.person];
   const R = p.jobs.ranking || {};
   const jobs = prep.jobs;
-  const emb = item.json.embeddings || [];
+  // Ollama answers { embeddings: [[...], ...] }; OpenAI-compatible APIs answer { data: [{ embedding: [...] }, ...] }
+  const emb = item.json.embeddings
+    || (item.json.data || []).slice().sort((x, y) => (x.index ?? 0) - (y.index ?? 0)).map(d => d.embedding)
+    || [];
 
   const rules = (R.rules || []).map(r => ({
     ...r,

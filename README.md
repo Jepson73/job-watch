@@ -9,7 +9,22 @@ Two self-hosted n8n workflows for job seekers in Sweden:
 
 Everything that differs between people lives in one JSON profile per person. The workflow holds no personal data, so it can be versioned and shared.
 
-**Runs fully locally**: ranking uses a local embedding model (bge-m3 via Ollama) and the short "daily thought" at the top of each email comes from a local LLM. No ad text or profile leaves the server except the API calls for search and travel times.
+**Can run fully locally**: by default, ranking uses a local embedding model (bge-m3 via Ollama) and the letters and the short "daily thought" come from local LLMs, so no profile or letter leaves your server; only the searches and travel-time lookups go out. You can use a cloud provider instead (see [Using another LLM provider](#using-another-llm-provider)).
+
+## Prerequisites
+
+This is not a ready-to-run app. It is two n8n workflows you install on your own infrastructure and personalise. You need:
+
+- **n8n**, self-hosted (Docker is easiest), running continuously so the schedule and the form work. Cloud n8n does not work, because the workflows read profile files from disk.
+- **An LLM for writing** the cover letters and the daily thought. By default that is a local model through [Ollama](https://ollama.com/), but any provider n8n has a chat model node for works (see [Using another LLM provider](#using-another-llm-provider)).
+- **An embedding model** for ranking ads. By default that is `bge-m3` in Ollama; any OpenAI-compatible embeddings API also works.
+- **Hardware for local models**, if you run them yourself: a GPU with about 12 GB of memory is comfortable for 12–14B chat models. Smaller models need less but write worse letters. Embeddings alone run fine on a CPU.
+- **API keys** (free tiers are enough): [Trafiklab ResRobot](https://www.trafiklab.se/api/our-apis/resrobot-v21/) for public transport and [OpenRouteService](https://openrouteservice.org/) for driving times. JobTech's ad API needs no key.
+- **An email account with SMTP access** to send the emails, for example Gmail with an app password.
+- **Python 3** to build the workflow files from the code, and **Node.js** only if you want to run the tests.
+- **The Swedish job market.** The ads come from Arbetsförmedlingen's open data, and the regexes, prompts and email texts are in Swedish.
+
+Then you write one profile per person: what to search for, what to filter out, how to rank, and, for the letters, their background and writing style. That is the real work, and what makes the results good. See `config.example/` for a complete made-up profile.
 
 ## Design principles
 
@@ -123,7 +138,7 @@ The person always gets a draft to read and change, with warnings ("Kontrollera")
 | `extraSections` | Text added when the ad matches (`ifAd`) or doesn't match (`unlessAd`) a regex |
 | `unknownTerms`, `outOfField`, `cleanup`, `strings` | See above; `strings` overrides the email wording |
 
-## What you need
+## Setup details
 
 n8n does not read a `.env` file for this project. API keys are stored as **credentials inside n8n**, and the shared settings live in **`_global.json`** next to the profiles. Here is everything required.
 
@@ -132,7 +147,7 @@ n8n does not read a `.env` file for this project. API keys are stored as **crede
 | What | Notes |
 |---|---|
 | Self-hosted n8n (Docker) | Must be able to read the profile folder (see Install) |
-| Ollama, reachable from n8n | With the three models below. GPU recommended |
+| Ollama, reachable from n8n | With the three models below, or another provider (next section) |
 | `bge-m3` | Embeddings for ranking ads (Job watch) |
 | `qwen3:14b` | The daily thought (Job watch). Any chat model works; change it in the *Thought model* node |
 | `gemma3:12b` | Writing the letters (Cover letter). Change it in the *Letter model* node |
@@ -143,10 +158,21 @@ n8n does not read a `.env` file for this project. API keys are stored as **crede
 |---|---|---|---|---|
 | ResRobot | Query Auth | Name `key`, Value: your API key | *Transit*, *Transit from Arlanda* | [Trafiklab](https://www.trafiklab.se/api/our-apis/resrobot-v21/) (free) |
 | OpenRouteService | Header Auth | Name `Authorization`, Value: your API key | *Car* | [openrouteservice.org](https://openrouteservice.org/) (free) |
-| Ollama | Ollama | Base URL, e.g. `http://ollama:11434` | *Thought model*, *Letter model* | Your Ollama instance |
+| Ollama | Ollama | Base URL, e.g. `http://ollama:11434` | *Thought model*, *Letter model* | Your Ollama instance (or another provider's credential) |
 | SMTP | SMTP | User, password, host, port, SSL/TLS | *Send email* (both workflows) | Your mail provider. Gmail: `smtp.gmail.com`, port 465, SSL on, and an [app password](https://support.google.com/accounts/answer/185833) |
 
 JobTech's JobSearch API needs no key. If nobody needs car travel times, set `"car": false` in the profiles. The *Car* node still needs a credential selected, but it makes no real lookups.
+
+### Using another LLM provider
+
+**Chat models** (*Thought model* in Job watch, *Letter model* in Cover letter) are separate sub-nodes. Delete the Ollama node and connect any chat model node n8n offers, such as OpenAI, Anthropic, Mistral, Groq or an OpenAI-compatible server (LM Studio, vLLM, llama.cpp), with its credential. The prompts ask for plain JSON, so most capable models work. Letters are written in Swedish, so check that the model writes good Swedish.
+
+**Embeddings** are a plain HTTP request in the *Match profile* node. It sends `{ "model": embedModel, "input": [texts] }` to `embedUrl` and understands both Ollama's answer and the OpenAI format. For an OpenAI-compatible service:
+
+1. In `_global.json`, set `embedUrl` (e.g. `https://api.openai.com/v1/embeddings`) and `embedModel` (e.g. `text-embedding-3-small`).
+2. In the *Match profile* node, set Authentication to a Header Auth credential with Name `Authorization` and Value `Bearer <your key>`.
+
+With a cloud provider, the person's profile, the ads and the letter drafts are sent to that provider. With local models nothing personal leaves your server; only searches and travel-time lookups go out.
 
 ### `_global.json`
 
@@ -169,7 +195,7 @@ JobTech's JobSearch API needs no key. If nobody needs car travel times, set `"ca
 
 ## Install
 
-1. Create the credentials and pull the Ollama models listed above.
+1. Create the credentials and pull the Ollama models listed above, or connect another provider.
 2. Copy `config.example/` to a private folder on the n8n host, e.g. `~/n8n-private/people/`, and edit `_global.json` and one file per person (`<id>.json`).
 3. Mount the folder and set the container settings above, then restart n8n.
 4. `python3 build.py --no-state`, import `out/job-watch-no-state.json` and `out/cover-letter.json`, and pick your credentials in the *Car*, *Transit*, *Transit from Arlanda*, *Thought model*, *Letter model* and *Send email* nodes.
@@ -178,7 +204,8 @@ JobTech's JobSearch API needs no key. If nobody needs car travel times, set `"ca
 ## Test
 
 ```bash
-cd test && npm install && npm test && cd ..   # builds and runs both with the example person
+cd test && npm install && cd ..
+python3 build.py --no-state
 node test/run.js                       # Job watch with config.example/
 node test/run-cover-letter.js          # Cover letter for the example person
 PEOPLE_DIR=/path/to/people node test/run.js
@@ -186,7 +213,3 @@ PEOPLE_DIR=/path/to/people node test/run-cover-letter.js <id>
 ```
 
 Writes the emails (and the Word files) to `test/results/`.
-
-## License
-
-MIT, see [LICENSE](LICENSE).
