@@ -1,0 +1,282 @@
+{
+  "id": "example",
+  "name": "Alex",
+  "active": true,
+  "_comment": "A made-up person. Copy this file, change everything, and save it as /private/people/<id>.json. Texts shown in the emails and the regexes are Swedish because the ads and the reader are.",
+  "home": {
+    "lat": 57.7089,
+    "lon": 11.9726,
+    "label": "Göteborg"
+  },
+  "email": {
+    "to": "alex@example.com",
+    "bcc": ""
+  },
+  "jobs": {
+    "sendHour": 8,
+    "search": {
+      "daysBack": 5,
+      "daysBackFirstRun": 14,
+      "queries": [
+        {
+          "area": "Dataanalys",
+          "q": "dataanalytiker"
+        },
+        {
+          "area": "Dataanalys",
+          "q": "BI-utvecklare"
+        },
+        {
+          "area": "Data engineering",
+          "q": "data engineer"
+        },
+        {
+          "area": "Python",
+          "q": "Python"
+        },
+        {
+          "area": "Distans",
+          "q": "dataanalytiker",
+          "remote": true
+        }
+      ]
+    },
+    "filter": {
+      "areas": [
+        {
+          "label": "Dataanalys",
+          "re": "dataanalys|data analyst|analytiker|business intelligence|\\bBI\\b|power bi|tableau"
+        },
+        {
+          "label": "Data engineering",
+          "re": "data engineer|dataplattform|datapipeline|etl|dbt|airflow"
+        },
+        {
+          "label": "Python",
+          "re": "\\bpython\\b|pandas"
+        }
+      ],
+      "remoteRe": "på distans|distansarbete|hybrid|remote|arbeta hemifrån",
+      "rejectTitleRe": "säljare|account manager|key account|sales|kundtjänst",
+      "staffingRe": "bemanning|staffing|consulting",
+      "viaClientRe": "på uppdrag av|för vår kunds räkning",
+      "maxDistanceKm": 150
+    },
+    "matching": {
+      "profile": "Dataanalytiker med några års erfarenhet av Python, SQL och Power BI. Bygger rapporter och dashboards, städar och kopplar ihop data från olika system och förklarar resultaten för verksamheten. Intresserad av data engineering och automatisering. Data analyst, SQL, Python, BI, dashboards, data pipelines."
+    },
+    "ranking": {
+      "maxCount": 20,
+      "matchWeight": 0.5,
+      "matchReason": "nära din profil",
+      "rules": [
+        {
+          "name": "remote",
+          "when": [
+            {
+              "flag": "remote"
+            }
+          ],
+          "weight": 0.1,
+          "reason": "distans/hybrid"
+        },
+        {
+          "name": "development",
+          "when": [
+            {
+              "re": "kompetensutveckling|vidareutbildning|möjlighet att utvecklas"
+            }
+          ],
+          "weight": 0.05,
+          "reason": "kompetensutveckling",
+          "label": "Kompetensutveckling"
+        },
+        {
+          "name": "salary",
+          "when": [
+            {
+              "flag": "salaryStated"
+            }
+          ],
+          "weight": 0.05,
+          "label": "Lön angiven"
+        },
+        {
+          "name": "senior",
+          "_comment": "Lowered unless the role is in the person's main area.",
+          "when": [
+            {
+              "re": "\\bsenior\\b|\\blead\\b|principal|head of",
+              "field": "title"
+            }
+          ],
+          "exceptAreas": [
+            "Dataanalys"
+          ],
+          "weight": -0.2,
+          "reason": "obs: senior roll"
+        },
+        {
+          "name": "stress",
+          "when": [
+            {
+              "re": "högt tempo|stresstålig|många bollar i luften|fast.?paced"
+            }
+          ],
+          "maxCount": 3,
+          "weight": -0.15,
+          "reason": "obs: tecken på högt tempo"
+        }
+      ]
+    },
+    "travel": {
+      "car": false,
+      "transit": {
+        "mode": "arrive",
+        "time": "09:00",
+        "fromAd": true,
+        "marginMin": 10
+      },
+      "flightViaArlanda": false
+    },
+    "email": {
+      "subject": "Nya jobb",
+      "heading": "Nya jobb för dig ({count} st)",
+      "intro": "De {count} mest intressanta av dagens nya annonser, sorterade efter restid och hur väl de passar din profil.",
+      "footer": "Restiderna gäller buss eller tåg där du är framme 10 minuter innan arbetet börjar.",
+      "travelTimeBy": "transit",
+      "transitLabel": "Buss/tåg",
+      "remoteGroup": "Distans eller hybrid",
+      "groups": [
+        {
+          "name": "Inom 30 minuter",
+          "max": 30
+        },
+        {
+          "name": "Inom en timme",
+          "max": 60
+        },
+        {
+          "name": "Längre resa",
+          "max": 120,
+          "housingLink": true
+        }
+      ],
+      "showEmployerType": true,
+      "deadlineWarningDays": 3,
+      "coverLetterForm": "cover-letter"
+    },
+    "thought": {
+      "themes": [
+        "nyfikenhet",
+        "små steg framåt",
+        "tålamod"
+      ],
+      "prompt": "Skriv en kort tanke på svenska till en person som söker jobb. Dagens tema: {theme}.\n\nEn eller två meningar, högst 30 ord. Upprepa inte någon av dessa tidigare tankar:\n{earlier}\n\nSvara ENDAST med själva tanken."
+    }
+  },
+  "coverLetter": {
+    "contact": {
+      "name": "Alex Exempel",
+      "town": "Göteborg",
+      "phone": "070-000 00 00",
+      "email": "alex@example.com"
+    },
+    "detectLanguage": true,
+    "languageNames": {
+      "sv": "svenska",
+      "en": "engelska (brittisk stavning)"
+    },
+    "remoteRe": "distans|hybrid|remote",
+    "profile": "Namn: Alex Exempel, bor i Göteborg.\n\nErfarenhet:\n- Dataanalytiker, Exempelbolaget Logistik AB (2021 och framåt): rapporter och dashboards i Power BI, SQL mot affärssystemet, automatiserade månadsrapporter i Python.\n- Ekonomiassistent, Exempelkommunen (2018-2021).\n\nUtbildning: kandidatexamen i statistik.\n\nVerktyg: Python (pandas), SQL, Power BI, Excel, Git.{certificate}\n\nDet Alex INTE har: erfarenhet av molnplattformar, personalansvar.",
+    "variables": {
+      "_comment": "Text that depends on the ad (adMatches) or the date (dateBefore), used as {name} in profile.",
+      "certificate": {
+        "adMatches": "power bi",
+        "then": " Certifierad i Power BI ({exam}).",
+        "else": ""
+      },
+      "exam": {
+        "dateBefore": "2027-03-01",
+        "then": "provet skrivs i februari 2027",
+        "else": "PL-300, februari 2027"
+      }
+    },
+    "style": "Rak, saklig och vänlig. Korta meningar. Konkreta exempel i stället för stora ord.",
+    "motivationDefault": "Inget angivet. Utgå från annonsen och Alex erfarenhet.",
+    "gapHeader": "SAKNAS I FÖRHÅLLANDE TILL ANNONSEN (annonsen efterfrågar detta, Alex har det inte. Skriv ALDRIG att Alex har det):",
+    "gaps": [
+      {
+        "missingSkills": true
+      },
+      {
+        "name": "Personalansvar",
+        "re": "personalansvar|chefserfarenhet",
+        "text": "Personalansvar: Alex har inte haft personalansvar. Närliggande: har introducerat nya kollegor i rapportverktygen."
+      }
+    ],
+    "missingSkills": {
+      "_comment": "Skills the person does not have. If the ad names one, the model may not write about it and the code adds an honest sentence. studied: read about but not used at work.",
+      "items": [
+        {
+          "name": "Azure",
+          "re": "\\bAzure\\b",
+          "flags": ""
+        },
+        {
+          "name": "AWS",
+          "re": "\\bAWS\\b",
+          "flags": ""
+        },
+        {
+          "name": "Spark",
+          "re": "\\bSpark\\b",
+          "flags": "",
+          "studied": true
+        }
+      ],
+      "gapText": "Teknik som annonsen nämner men som Alex INTE kan: {items}. Skriv INTE om dessa alls. En ärlig mening om dem läggs in automatiskt.",
+      "sentences": {
+        "sv": {
+          "and": "och",
+          "or": "och",
+          "studied": "{items} har jag läst på om, men inte använt i arbetet.",
+          "never": "{items} har jag ännu inte arbetat med.",
+          "after": "Jag lär mig nya verktyg snabbt genom att bygga något riktigt med dem."
+        },
+        "en": {
+          "and": "and",
+          "or": "or",
+          "it": "it",
+          "them": "them",
+          "studied": "I have studied {items} but not used {it} at work.",
+          "never": "I have not yet worked with {items}.",
+          "after": "I pick up new tools quickly by building something real with them."
+        }
+      }
+    },
+    "previousEmployerTemplate": "{text} Spekulera inte om varför Alex vill byta.",
+    "previousEmployers": [
+      {
+        "re": "exempelbolaget",
+        "text": "NUVARANDE ARBETSGIVARE: Alex arbetar redan på Exempelbolaget. Lyft att Alex känner verksamheten och dess data."
+      }
+    ],
+    "unknownTerms": [
+      "Snowflake",
+      "Databricks",
+      "Looker"
+    ],
+    "cleanup": {
+      "replacements": [
+        [
+          "\\bpassionerad\\b",
+          "gi",
+          "engagerad"
+        ]
+      ],
+      "dropSentencesRe": "drömjobb"
+    },
+    "prompt": "Du skriver delarna till ett kort personligt brev åt Alex. Sidhuvud, rubrik, hälsning och underskrift läggs till automatiskt.\n\nSPRÅK: Skriv på {languageName}, samma språk som annonsen.\n\nOM ALEX:\n{profile}\n\nRÖST:\n{style}\n\nANNONSEN:\n{ad}\n\nVAD SOM LOCKAR MED JOBBET:\n{motivation}\n\nANNONSEN NÄMNER DISTANSARBETE: {remote}\n\nSvara med ENDAST ett JSON-objekt med fälten:\n\"inledning\": 2 meningar om vad Alex tar med sig till tjänsten.\n\"matchning\": 3 meningar om de två viktigaste kraven i annonsen och ett konkret exempel ur profilen. Finns ett avsnitt \"SAKNAS I FÖRHÅLLANDE TILL ANNONSEN\", säg det ärligt och visa närliggande erfarenhet.\n\"bidrag\": 2 meningar om vad Alex bidrar med utöver kraven.\n\"utveckling\": 1 till 2 meningar om vad Alex vill lära sig i tjänsten.\n\"avslutning\": 1 kort mening.\n\"tips\": högst 3 korta förslag på svenska om vad Alex kan lägga till.\n\nRegler: 150 till 220 ord totalt. Använd bara fakta ur profilen. Inga tankstreck. Inga klyschor som brinner för, passionerad eller drömjobb."
+  }
+}

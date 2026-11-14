@@ -1,0 +1,11 @@
+{
+  "global": true,
+  "_comment": "Shared settings. testTo: send ALL emails here instead (empty = live). testPerson: manual runs only for that person.",
+  "from": "sender@example.com",
+  "testTo": "you@example.com",
+  "testPerson": "",
+  "timezone": "Europe/Stockholm",
+  "embedUrl": "http://ollama:11434/api/embed",
+  "embedModel": "bge-m3",
+  "formBaseUrl": "http://n8n.local:5678/form/"
+}

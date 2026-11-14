@@ -1,0 +1,12 @@
+{
+  "name": "job-watch-tests",
+  "private": true,
+  "description": "Runs the Job watch and Cover letter workflows locally with a mock n8n runtime and mock APIs.",
+  "scripts": {
+    "build": "cd .. && python3 build.py --no-state",
+    "test": "npm run build && node run.js && node run-cover-letter.js"
+  },
+  "dependencies": {
+    "luxon": "^3.7.2"
+  }
+}
