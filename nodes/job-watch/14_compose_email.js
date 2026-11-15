@@ -2,7 +2,7 @@
 // Mode: Run Once for All Items
 // Builds one email per person. Groups, texts and what is shown come from jobs.email in the profile.
 // The fixed wording of the email is in STRINGS below (Swedish by default). Override any of it
-// with "strings" in _global.json, for example to send the emails in English.
+// with "strings" in _global.json (everyone) or in jobs.email.strings (one person).
 
 const STRINGS = {
   locale: 'sv',
@@ -24,7 +24,7 @@ const STRINGS = {
   changes: 'byten',
   walkPart: 'varav {min} min gång',
   arrives: 'framme {time}',
-  flight: 'Flyg via Arlanda ca {time}',
+  flight: 'Flyg via {label} ca {time}',
   workStartsAd: 'Arbetet börjar {time} enligt annonsen',
   workStartsDefault: 'Annonsen anger ingen arbetstid, räknat med start {time}',
   remoteNoTravel: 'Distans eller hybrid, restid ej beräknad',
@@ -71,7 +71,9 @@ for (const [id, jobs] of Object.entries(byPerson)) {
   const p = people[id];
   const E = p.jobs.email || {};
   const G = p.global || {};
-  const S = { ...STRINGS, ...(G.strings || {}), employerTypes: { ...STRINGS.employerTypes, ...(G.strings?.employerTypes || {}) } };
+  const S = { ...STRINGS, ...(G.strings || {}), ...(E.strings || {}),
+    employerTypes: { ...STRINGS.employerTypes, ...(G.strings?.employerTypes || {}), ...(E.strings?.employerTypes || {}) } };
+  const flightLabel = p.jobs.travel?.flight?.label || '';
   const duration = m => m == null ? S.unknown
     : (m < 60 ? `${m} ${S.minutes}` : `${Math.floor(m / 60)} ${S.hours} ${String(m % 60).padStart(2, '0')} ${S.minutes}`);
 
@@ -139,7 +141,7 @@ for (const [id, jobs] of Object.entries(byPerson)) {
       trip = [
         (E.travelTimeBy !== 'transit' && j.carMin != null) ? `${S.car} ${duration(j.carMin)}` : null,
         transit,
-        j.flightMin != null ? fill(S.flight, { time: duration(j.flightMin) }) : null,
+        j.flightMin != null ? fill(S.flight, { time: duration(j.flightMin), label: flightLabel }) : null,
       ].filter(Boolean).join(' · ')
         || (j.remote ? S.remoteNoTravel : S.unknownTravel);
       if (j.workStart) {

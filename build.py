@@ -43,7 +43,6 @@ def connect(src, dst, kind='main'):
     conns.setdefault(src, {}).setdefault(kind, [[]])[0].append({'node': dst, 'type': kind, 'index': 0})
 
 q = lambda n, v: {'name': n, 'value': v}
-next_monday = "={{ $now.plus({ days: 8 - $now.weekday }).toFormat('yyyy-MM-dd') }}"
 
 # ---------- Triggers and profiles ----------
 node('Schedule Trigger', 'n8n-nodes-base.scheduleTrigger', 1.2,
@@ -98,7 +97,7 @@ node('Transit', 'n8n-nodes-base.httpRequest', 4.2, {
         q('format', 'json'),
         q('originCoordLat', '={{ $json.homeLat }}'), q('originCoordLong', '={{ $json.homeLon }}'),
         q('destCoordLat', '={{ $json.lat }}'), q('destCoordLong', '={{ $json.lon }}'),
-        q('date', next_monday), q('time', '={{ $json.time }}'),
+        q('date', '={{ $json.date }}'), q('time', '={{ $json.time }}'),
         q('searchForArrival', '={{ $json.arrive }}'), q('numF', '6'),
     ]},
     'options': {'batching': {'batch': {'batchSize': 1, 'batchInterval': 1500}}}
@@ -106,15 +105,15 @@ node('Transit', 'n8n-nodes-base.httpRequest', 4.2, {
 code('Save transit', '10_save_transit.js', per_item=True, alwaysOutputData=True)
 
 code('Flight trips', '11_flight_trips.js', alwaysOutputData=True)
-node('Transit from Arlanda', 'n8n-nodes-base.httpRequest', 4.2, {
+node('Transit from airport', 'n8n-nodes-base.httpRequest', 4.2, {
     'url': 'https://api.resrobot.se/v2.1/trip',
     'authentication': 'genericCredentialType', 'genericAuthType': 'httpQueryAuth',
     'sendQuery': True,
     'queryParameters': {'parameters': [
         q('format', 'json'),
-        q('originCoordLat', '59.6497'), q('originCoordLong', '17.9286'),
+        q('originCoordLat', '={{ $json.fromLat }}'), q('originCoordLong', '={{ $json.fromLon }}'),
         q('destCoordLat', '={{ $json.lat }}'), q('destCoordLong', '={{ $json.lon }}'),
-        q('date', next_monday), q('time', '07:00'), q('searchForArrival', '0'), q('numF', '6'),
+        q('date', '={{ $json.date }}'), q('time', '={{ $json.time }}'), q('searchForArrival', '0'), q('numF', '6'),
     ]},
     'options': {'batching': {'batch': {'batchSize': 1, 'batchInterval': 1500}}}
 }, credentials=CRED['resrobot'], onError='continueRegularOutput')
@@ -137,7 +136,7 @@ node('Send email', 'n8n-nodes-base.emailSend', 2.1, {
 
 CHAIN = ['Read profiles', 'Parse profiles', 'Select people', 'Build searches', 'Search jobs', 'Filter ads',
          'Prepare matching', 'Match profile', 'Rank', 'Plan trips', 'Car trips', 'Car', 'Save car', 'Transit trips',
-         'Transit', 'Save transit', 'Flight trips', 'Transit from Arlanda', 'Save flight', 'Attach travel times',
+         'Transit', 'Save transit', 'Flight trips', 'Transit from airport', 'Save flight', 'Attach travel times',
          'Compose email', 'Daily thought', 'Add thought', 'Send email']
 connect('Schedule Trigger', 'Read profiles')
 connect('Run manually', 'Read profiles')

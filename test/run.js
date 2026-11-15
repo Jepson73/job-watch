@@ -75,7 +75,7 @@ const km = (a, b) => {
   const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLon / 2) ** 2;
   return 6371 * 2 * Math.asin(Math.sqrt(h));
 };
-const calls = { jobtech: [], ors: 0, resrobot: [], arlanda: 0, embed: 0 };
+const calls = { jobtech: [], ors: 0, resrobot: [], airport: 0, embed: 0 };
 
 function jobtech(url) {
   calls.jobtech.push(decodeURIComponent(url));
@@ -109,7 +109,7 @@ function ors(j) {
 function resrobot(j, from) {
   const a = from || { lat: j.homeLat, lon: j.homeLon };
   if (a.lat == null) return { errorText: 'Bad request' };
-  from ? calls.arlanda++ : calls.resrobot.push(`${j.time} ${j.arrive === '1' ? 'arrive' : 'depart'}`);
+  from ? calls.airport++ : calls.resrobot.push(`${j.time} ${j.arrive === '1' ? 'arrive' : 'depart'}`);
   const min = Math.round(15 + km(a, j) * 0.9);
   const date = '2026-11-23';
   const mk = (h, m) => `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
@@ -163,8 +163,8 @@ function embed(texts) {
       case 'Transit':
         res = prev.map((it, i) => ({ json: resrobot(it.json), pairedItem: { item: i } }));
         break;
-      case 'Transit from Arlanda':
-        res = prev.map((it, i) => ({ json: resrobot({ ...it.json, time: '07:00' }, { lat: 59.6497, lon: 17.9286 }), pairedItem: { item: i } }));
+      case 'Transit from airport':
+        res = prev.map((it, i) => ({ json: resrobot(it.json, it.json.fromLat != null ? { lat: it.json.fromLat, lon: it.json.fromLon } : { lat: null }), pairedItem: { item: i } }));
         break;
       case 'Daily thought':
         res = prev.map((it, i) => ({ json: { text: `<think>hmm</think>"Test thought ${i}: ${/\{(theme|earlier)\}/.test(it.json.thoughtPrompt) ? 'PLACEHOLDER LEFT' : 'ok'}"` }, pairedItem: { item: i } }));

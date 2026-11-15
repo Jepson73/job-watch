@@ -20,8 +20,12 @@ const STRINGS = {
   warnGaps: 'Annonsen efterfrågar något du inte har enligt profilen: {gaps}. Brevet säger det öppet. Kontrollera att formuleringen känns rätt för dig.',
   warnMentions: 'Brevet nämner {items}, som inte finns i din profil. Ta bort det om du inte har den kunskapen.',
   warnRemoved: 'Meningar som påstod att du kan {items} togs bort, eftersom det inte finns i din profil. Läs igenom att brevet hänger ihop.',
+  warnFamiliar: 'Brevet påstod att du känner {employer} eller orten, men den står inte bland dina tidigare arbetsgivare. Det togs bort ur meningen: "{sentence}"',
   warnLanguage: 'Annonsen är på {asked}, men modellen skrev brevet på {got}. Hela brevet är därför på {got}. Vill du ha det på {asked}, skicka formuläret igen.',
   languageNames: { sv: 'svenska', en: 'engelska' },
+  // The model's JSON field names, as they should read in the tips
+  fieldWords: { inledning: 'inledningen', matchning: 'stycket om hur du matchar annonsen', bidrag: 'stycket om vad du bidrar med',
+    utveckling: 'stycket om vad du vill utvecklas i', avslutning: 'avslutningen', glimt: 'den avslutande glimten' },
 };
 const LETTER = {
   sv: { hello: 'Hej,', regards: 'Med vänliga hälsningar', application: 'Ansökan', reference: 'Referens', locale: 'sv-SE',
@@ -30,10 +34,30 @@ const LETTER = {
         fallbackClosing: 'I would be glad to tell you more about how my experience can be of use to you.' },
 };
 
+// The JSON fields the person's prompt asks the model for, in letter order (coverLetter.answer).
+//   field: name, or a list of names where the first one present is used
+//   honestSentence: the code's honest sentence about missing skills goes first in this paragraph
+//   list: the field may hold several paragraphs;  joke: a one-line field appended to the last of them
+//   keepAsIs: skip the missing-skill and example checks for this field
+const DEFAULT_ANSWER = {
+  paragraphs: [
+    { field: 'inledning' },
+    { field: 'matchning', honestSentence: true },
+    { field: ['bidrag', 'exempel'], list: true, joke: 'glimt' },
+    { field: ['intresse', 'motivation'], keepAsIs: true },
+    { field: 'utveckling' },
+    { field: 'avslutning' },
+  ],
+  tips: 'tips',
+};
+
 const b = $('Build profile').first().json;
 const p = $('Select person').first().json;
 const G = p.global || {};
 const C = p.coverLetter;
+const ANSWER = C.answer || DEFAULT_ANSWER;
+const names = spec => [].concat(spec.field);
+const valueOf = (parts, spec) => { for (const n of names(spec)) if (parts[n] != null && parts[n] !== '') return parts[n]; return undefined; };
 // Any entry in STRINGS can be overridden per person with coverLetter.strings
 Object.assign(STRINGS, C.strings || {});
 const K = C.contact || { name: p.name, town: '', phone: '', email: '' };
@@ -68,59 +92,41 @@ const languageOf = text => {
   const en = w.filter(x => EN.includes(x)).length, sv = w.filter(x => SV.includes(x)).length;
   return en + sv < 5 ? null : (en > sv ? 'en' : 'sv');
 };
-const written = parts ? languageOf(['inledning', 'matchning', 'bidrag', 'utveckling', 'avslutning']
-  .flatMap(f => [].concat(parts[f] || [])).join(' ')) : null;
+const written = parts ? languageOf(ANSWER.paragraphs.filter(sp => !sp.keepAsIs)
+  .flatMap(sp => [].concat(parts[names(sp)[0]] || [])).join(' ')) : null;
 const language = written || b.language;
 const switched = !!written && written !== b.language;
-const L = LETTER[language] || LETTER.sv;
+// coverLetter.letterTexts overrides the header and closing texts per language, e.g. { "sv": { "hello": "Hej!" } }
+const L = { ...(LETTER[language] || LETTER.sv), ...((C.letterTexts || {})[language] || {}) };
 const honestSentence = (b.honestByLanguage || {})[language] ?? b.honestSentence;
 
-// ----- Clean the language (Swedish) -----
-const clean = s => String(s || '')
-  .replace(/(\d)\s*[–—]\s*(\d)/g, '$1-$2')            // 2016–2023 -> 2016-2023
-  .replace(/\s*[–—]\s*/g, ', ')                       // other dashes -> comma
-  .replace(/,\s*,/g, ',')
-  .replace(/,\s*([.!?:])/g, '$1')
-  .replace(/\b(har|hade)((?:\s+\S+)?)\s+handlade\b/g, '$1$2 handlagt')   // "har jag handlade" -> "har jag handlagt"
-  .replace(/\bhandlat\b(?!\s+om\b)/g, 'handlagt')
-  .replace(/\bhandledt\b/g, 'handlett')
-  .replace(/\s+/g, ' ')
-  .trim();
+// ----- Cleanup rules from the profile (coverLetter.cleanup) -----
+// Every rule is [regex, flags, replacement] or [regex, flags, replacement, scope], applied in order.
+//   normalize:     applied to every text (letter paragraphs, tips, the joke line)
+//   replacements:  applied to the letter paragraphs. scope "notLast" = not in the closing paragraph,
+//                  "last" = only in the closing paragraph. In a replacement, \U$2 means group 2 in upper case.
+//   dropSentencesRe: sentences matching it are removed from the letter.
+const CL = C.cleanup || {};
+const compile = rules => (rules || []).map(([re, flags, to, scope]) => ({ re: new RegExp(re, flags ?? 'g'), to: String(to ?? ''), scope: scope || 'all' }));
+const apply = (t, rule) => rule.to.includes('\\U$')
+  ? t.replace(rule.re, (...m) => rule.to.replace(/\\U\$(\d)/g, (x, n) => String(m[n] ?? '').toUpperCase()).replace(/\$(\d)/g, (x, n) => m[n] ?? ''))
+  : t.replace(rule.re, rule.to);
+const NORMALIZE = compile(CL.normalize);
+const REPLACE = compile(CL.replacements);
+const DROP = CL.dropSentencesRe ? new RegExp(CL.dropSentencesRe, 'i') : null;
 
-// Filler the model writes anyway. The common rules are here; person-specific ones in coverLetter.cleanup.
-const extraRules = (C.cleanup?.replacements || []).map(([re, flags, to]) => [new RegExp(re, flags ?? 'gi'), to]);
-const DROP = new RegExp(['framgång|är övertygad|inspirerande|passionate|team player|I am confident|I am convinced', C.cleanup?.dropSentencesRe]
-  .filter(Boolean).join('|'), 'i');
+const clean = s => NORMALIZE.reduce(apply, String(s || '')).replace(/\s+/g, ' ').trim();
 const unfill = (paragraph, isLast) => {
-  let t = paragraph
-    .replace(/\bgedig(en|et|na)\s+/gi, '')
-    .replace(/\bintake\b/gi, 'telefonmottagning')
-    .replace(/\bbästa praxis\b/gi, 'det som fungerat bäst')
-    .replace(/\bbest practice\b/gi, 'det som fungerat bäst')
-    .replace(/\bvilket jag tror\b/gi, 'vilket')
-    .replace(/\bjag tror att (det|detta)\b/gi, '$1')
-    .replace(/\bmin expertis\b/gi, 'min erfarenhet');
-  for (const [re, to] of extraRules) t = t.replace(re, to);
-  t = t
-    .replace(/,\s*vilket (gav|ledde till|resulterade i)[^.]*\./gi, '.')
-    .replace(/\b[Jj]ag tror att vi tillsammans kan\b/g, 'Tillsammans kan vi')
-    .replace(/\btror jag att vi tillsammans kan\b/g, 'kan vi tillsammans')
-    .replace(/\btror jag att vi kan\b/g, 'kan vi')
-    .replace(/(^|[.!?]\s+)[Jj]ag tror att (\S)/g, (m, f, c) => f + c.toUpperCase());
-  if (!isLast) t = t
-    .replace(/\b([Jj]ag) ser fram emot att\b/g, '$1 vill')
-    .replace(/\boch ser fram emot att\b/g, 'och vill')
-    .replace(/\b([Ss]er) jag fram emot att\b/g, (m, s) => (s === 'Ser' ? 'Vill' : 'vill') + ' jag')
-    .replace(/\bI look forward to\b/g, 'I would welcome');
-  // At most one "ser fram emot", in the closing
-  if (isLast) t = t.replace(/(ser fram emot[^.]*?)\s+och ser fram emot att\s+/i, '$1 och ');
-  return sentences(t).filter(s => !DROP.test(s)).join(' ').replace(/^\w/, c => c.toUpperCase()).trim();
+  const t = REPLACE
+    .filter(r => r.scope === 'all' || (r.scope === 'last') === isLast)
+    .reduce(apply, paragraph);
+  return sentences(t).filter(x => !(DROP && DROP.test(x))).join(' ').replace(/^\w/, c => c.toUpperCase()).trim();
 };
 
 // ----- Claims the profile can't back up -----
 // unknownTerms: systems, laws and tools not in the profile. A sentence claiming one is removed,
-// unless it says the person does NOT have it.
-const NEGATION = /(^|\s)(inte|INTE|aldrig|saknar|ingen|inga|not|never|no)(\s|[.,:]|$)/;
+// unless it matches cleanup.negationRe (says the person does NOT have it). Case-sensitive.
+const NEGATION = CL.negationRe ? new RegExp(CL.negationRe) : /$^/;
 const termRe = t => new RegExp(`(^|[^\\wåäöÅÄÖ])${t.replace(/[.*+?^${}()|[\]\\#]/g, '\\$&')}($|[^\\wåäöÅÄÖ])`);
 const profileHas = sentences(b.profileFacts).flatMap(s => s.split('\n')).filter(s => !NEGATION.test(s)).join('\n');
 const unknown = (C.unknownTerms || []).filter(t => !termRe(t).test(profileHas));
@@ -131,12 +137,30 @@ const dropUnknownClaims = s => sentences(s).filter(m => {
   return true;
 }).join(' ').trim();
 
+// Familiarity claims ("en kommun jag känner väl") are only allowed when the profile lists the employer under
+// previousEmployers. Otherwise the clause, or the whole sentence, is removed. The patterns are cleanup.familiarityRe;
+// without them there is no check.
+const knowsEmployer = !CL.familiarityRe
+  || (C.previousEmployers || []).some(e => new RegExp(e.re, 'i').test(b.employer || ''));
+const FAMILIAR = new RegExp(CL.familiarityRe || '$^', 'i');
+const familiarRemoved = [];
+const dropFamiliarity = (t, quiet = false) => knowsEmployer || !t ? t : sentences(t).map(m => {
+  if (!FAMILIAR.test(m)) return m;
+  if (!quiet) familiarRemoved.push(m);
+  // Keep the part before the claim if there is one ("…i Borås, en stad jag känner väl…" -> "…i Borås.")
+  const keep = [];
+  for (const part of m.split(/,\s+/)) { if (FAMILIAR.test(part)) break; keep.push(part); }
+  if (!keep.length) return '';
+  const head = keep.join(', ').replace(/[,\s]+$/, '');
+  return /[.!?]$/.test(head) ? head : head + '.';
+}).filter(Boolean).join(' ');
+
 // Missing skills: every sentence mentioning one is removed; the code's honest sentence replaces them.
 const skillRes = (C.missingSkills?.items || []).map(s => ({ name: s.name, re: new RegExp(s.re, s.flags ?? '') }));
 const missingRes = skillRes.filter(s => (b.missingSkills || []).includes(s.name)).map(s => s.re);
 const dropMissing = t => !t ? t : sentences(t).filter(m => !missingRes.some(re => re.test(m))).join(' ');
 
-// "glimt": an optional one-line dry joke. The prompt's examples must not be reused.
+// The joke line (answer.paragraphs[].joke) must not reuse the prompt's examples (cleanup.glimtExamples).
 const EXAMPLES = C.cleanup?.glimtExamples || [];
 const words = t => String(t).toLowerCase().match(/[a-zåäö]+/g) || [];
 const resembles = (a, e) => { const aw = new Set(words(a)); const ew = words(e); return ew.length && ew.filter(w => aw.has(w)).length / ew.length >= 0.6; };
@@ -149,30 +173,36 @@ if (b.outOfField) {
   <p style="margin:0 0 12px">${esc(fill(STRINGS.noLetterBody, { occupation: [b.occupation || STRINGS.anotherOccupation, b.occupationField ? `(${b.occupationField})` : ''].filter(Boolean).join(' '), field: C.outOfField?.fieldName || 'ditt yrkesområde' }))}</p>
   <p style="margin:0">${esc(STRINGS.noLetterAsk)}</p>`;
 } else if (parts) {
-  const contribution = asList(parts.bidrag || parts.exempel);
-  let glimt = clean(Array.isArray(parts.glimt) ? parts.glimt[0] : parts.glimt);
-  if (glimt && EXAMPLES.some(e => resembles(glimt, e))) glimt = '';
-  for (const f of ['inledning', 'matchning', 'utveckling', 'avslutning']) parts[f] = dropMissing(dropExamples(parts[f]));
-  for (let i = 0; i < contribution.length; i++) contribution[i] = dropMissing(dropExamples(contribution[i]));
-  if (glimt && contribution.length) contribution[contribution.length - 1] = `${contribution[contribution.length - 1]} ${glimt}`;
-  else if (glimt) contribution.push(glimt);
-  const matching = [honestSentence, parts.matchning].filter(Boolean).join(' ');
+  const pieces = [];
+  for (const spec of ANSWER.paragraphs) {
+    const check = t => spec.keepAsIs ? t : dropMissing(dropExamples(t));
+    if (spec.list) {
+      const items = asList(valueOf(parts, spec)).map(check);
+      let joke = spec.joke ? clean(asList(parts[spec.joke])[0]) : '';
+      if (joke && EXAMPLES.some(e => resembles(joke, e))) joke = '';
+      if (joke && items.length) items[items.length - 1] = `${items[items.length - 1]} ${joke}`;
+      else if (joke) items.push(joke);
+      pieces.push(...items);
+    } else {
+      const v = check(valueOf(parts, spec));
+      pieces.push(spec.honestSentence ? [honestSentence, v].filter(Boolean).join(' ') : v);
+    }
+  }
 
-  const paragraphs = [
-    parts.inledning,
-    matching,
-    ...contribution,
-    parts.intresse || parts.motivation,
-    parts.utveckling,
-    parts.avslutning
-  ].map(clean).filter(Boolean)
+  const paragraphs = pieces.map(clean).filter(Boolean)
    .map((s, i, all) => unfill(s, i === all.length - 1))
    .map(dropUnknownClaims)
+   .map(dropFamiliarity)
    .filter(Boolean);
-  if (!paragraphs.length || !/ser fram emot|gärna|hör av|look forward|glad|happy to|welcome/i.test(paragraphs.at(-1))) {
+  // No closing (cleanup.closingRe) in the last paragraph: add the language's fallback closing
+  if (CL.closingRe && (!paragraphs.length || !new RegExp(CL.closingRe, 'i').test(paragraphs.at(-1)))) {
     paragraphs.push(L.fallbackClosing);
   }
-  tips = asList(parts.tips).map(clean).map(dropUnknownClaims).filter(Boolean).slice(0, 3);
+  // Tips: same checks as the letter, and the model's JSON field names ('matchning') become plain words
+  const FIELD_WORDS = STRINGS.fieldWords;
+  const fieldRe = new RegExp(`['"‘’“”«»](${Object.keys(FIELD_WORDS).join('|')})['"‘’“”«»]`, 'gi');
+  const plainFields = t => t.replace(fieldRe, (m, f) => FIELD_WORDS[f.toLowerCase()] ?? m);
+  tips = asList(parts[ANSWER.tips || 'tips']).map(clean).map(dropUnknownClaims).map(t => dropFamiliarity(t, true)).map(plainFields).filter(Boolean).slice(0, 3);
 
   const date = new Intl.DateTimeFormat(L.locale, { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
   const contactLines = [K.phone, K.email].filter(Boolean).map(esc).join('<br>');
@@ -206,6 +236,7 @@ if (letterData) {
   if (mentioned.length) warnings.push(fill(STRINGS.warnMentions, { items: mentioned.join(', ') }));
 }
 if (removed.length) warnings.push(fill(STRINGS.warnRemoved, { items: [...new Set(removed)].join(', ') }));
+for (const m of familiarRemoved) warnings.push(fill(STRINGS.warnFamiliar, { sentence: m, employer }));
 if (switched) warnings.push(fill(STRINGS.warnLanguage, { asked: STRINGS.languageNames[b.language], got: STRINGS.languageNames[language] }));
 
 const box = (title, items, bg, border, colour = '#222') => items.length

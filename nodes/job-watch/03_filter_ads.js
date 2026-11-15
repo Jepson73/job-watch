@@ -8,9 +8,6 @@ const people = Object.fromEntries($('Select people').all().map(i => [i.json.id, 
 const searchRows = $('Build searches').all();
 const sd = $getWorkflowStaticData('global');
 
-const ARN = { lat: 59.6519, lon: 17.9186 };   // Stockholm Arlanda airport
-const MAX_FROM_ARN = 120;                     // km from Arlanda for the flight option
-
 const RE = s => (s ? new RegExp(s, 'i') : null);
 const rad = d => d * Math.PI / 180;
 const km = (a, b) => {
@@ -49,7 +46,8 @@ const rules = p => cache[p.id] ??= (() => {
     rejectEmployment: RE(f.rejectEmploymentRe),
     occupation: f.occupation ? { fields: f.occupation.allowedFields || [], re: RE(f.occupation.occupationRe) } : null,
     maxKm: f.maxDistanceKm ?? 400,
-    flight: !!p.jobs.travel?.flightViaArlanda,
+    // Weekly commuting by air (jobs.travel.flight): jobs near the destination airport
+    flight: p.jobs.travel?.flight || null,
     nationwideMinKm: p.jobs.search?.nationwide?.minKm ?? 200,
     parseHours: p.jobs.travel?.transit?.mode === 'arrive' && p.jobs.travel.transit.fromAd,
   };
@@ -118,7 +116,7 @@ for (const [idx, item] of $input.all().entries()) {
       if (!place || distanceKm < r.nationwideMinKm) continue;
       nationwide = true;
     } else if (place) {
-      flightCandidate = r.flight && km(ARN, place) <= MAX_FROM_ARN;
+      flightCandidate = !!r.flight && km(r.flight.airport, place) <= (r.flight.maxKmFromAirport ?? 120);
       tooFar = distanceKm > r.maxKm && !flightCandidate;
       if (tooFar && !remote) continue;
     }

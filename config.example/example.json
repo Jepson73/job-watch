@@ -136,8 +136,7 @@
         "time": "09:00",
         "fromAd": true,
         "marginMin": 10
-      },
-      "flightViaArlanda": false
+      }
     },
     "email": {
       "subject": "Nya jobb",
@@ -172,7 +171,20 @@
         "små steg framåt",
         "tålamod"
       ],
-      "prompt": "Skriv en kort tanke på svenska till en person som söker jobb. Dagens tema: {theme}.\n\nEn eller två meningar, högst 30 ord. Upprepa inte någon av dessa tidigare tankar:\n{earlier}\n\nSvara ENDAST med själva tanken."
+      "prompt": "Skriv en kort tanke på svenska till en person som söker jobb. Dagens tema: {theme}.\n\nEn eller två meningar, högst 30 ord. Upprepa inte någon av dessa tidigare tankar:\n{earlier}\n\nSvara ENDAST med själva tanken.",
+      "replacements": [
+        [
+          "\\s*[–—]\\s*",
+          "g",
+          ", "
+        ],
+        [
+          ",\\s*([.!?])",
+          "g",
+          "$1"
+        ]
+      ],
+      "rejectRe": "\\b(take|the|you|your|step|steps|don't|it's|every|today|keep|just do|journey|will|with|yourself|and)\\b"
     }
   },
   "coverLetter": {
@@ -268,15 +280,173 @@
       "Looker"
     ],
     "cleanup": {
+      "_comment": "Rules applied to the model's text, in order. Each is [regex, flags, replacement] or [..., scope] where scope is notLast (not in the closing paragraph) or last. \\U$2 = group 2 in upper case. normalize applies to all texts including tips; replacements to the letter paragraphs.",
+      "normalize": [
+        [
+          "(\\d)\\s*[–—]\\s*(\\d)",
+          "g",
+          "$1-$2"
+        ],
+        [
+          "\\s*[–—]\\s*",
+          "g",
+          ", "
+        ],
+        [
+          ",\\s*,",
+          "g",
+          ","
+        ],
+        [
+          ",\\s*([.!?:])",
+          "g",
+          "$1"
+        ]
+      ],
       "replacements": [
+        [
+          "\\bgedig(en|et|na)\\s+",
+          "gi",
+          ""
+        ],
+        [
+          "\\bbästa praxis\\b",
+          "gi",
+          "det som fungerat bäst"
+        ],
+        [
+          "\\bbest practice\\b",
+          "gi",
+          "det som fungerat bäst"
+        ],
+        [
+          "\\bvilket jag tror\\b",
+          "gi",
+          "vilket"
+        ],
+        [
+          "\\bjag tror att (det|detta)\\b",
+          "gi",
+          "$1"
+        ],
+        [
+          "\\bmin expertis\\b",
+          "gi",
+          "min erfarenhet"
+        ],
         [
           "\\bpassionerad\\b",
           "gi",
           "engagerad"
+        ],
+        [
+          ",\\s*vilket (gav|ledde till|resulterade i)[^.]*\\.",
+          "gi",
+          "."
+        ],
+        [
+          "\\b[Jj]ag tror att vi tillsammans kan\\b",
+          "g",
+          "Tillsammans kan vi"
+        ],
+        [
+          "\\btror jag att vi tillsammans kan\\b",
+          "g",
+          "kan vi tillsammans"
+        ],
+        [
+          "\\btror jag att vi kan\\b",
+          "g",
+          "kan vi"
+        ],
+        [
+          "(^|[.!?]\\s+)[Jj]ag tror att (\\S)",
+          "g",
+          "$1\\U$2"
+        ],
+        [
+          "\\b([Jj]ag) ser fram emot att\\b",
+          "g",
+          "$1 vill",
+          "notLast"
+        ],
+        [
+          "\\boch ser fram emot att\\b",
+          "g",
+          "och vill",
+          "notLast"
+        ],
+        [
+          "\\bSer jag fram emot att\\b",
+          "g",
+          "Vill jag",
+          "notLast"
+        ],
+        [
+          "\\bser jag fram emot att\\b",
+          "g",
+          "vill jag",
+          "notLast"
+        ],
+        [
+          "\\bI look forward to\\b",
+          "g",
+          "I would welcome",
+          "notLast"
+        ],
+        [
+          "(ser fram emot[^.]*?)\\s+och ser fram emot att\\s+",
+          "i",
+          "$1 och ",
+          "last"
         ]
       ],
-      "dropSentencesRe": "drömjobb"
+      "dropSentencesRe": "framgång|är övertygad|inspirerande|passionate|team player|I am confident|I am convinced|drömjobb",
+      "closingRe": "ser fram emot|gärna|hör av|look forward|glad|happy to|welcome",
+      "negationRe": "(^|\\s)(inte|INTE|aldrig|saknar|ingen|inga|not|never|no)(\\s|[.,:]|$)",
+      "familiarityRe": "\\bkänner (väl |redan |sedan tidigare )?(till )?(den |det |denna )?(er|era|kommunen|staden|regionen|verksamheten|organisationen|arbetsplatsen|orten)\\b|\\b(kommun|stad|ort|region|verksamhet|organisation|arbetsplats)(en)? (som )?jag (redan |väl )?känner\\b|\\bI (already )?know (your|the) (municipality|council|organisation|organization|town|city|team)\\b|\\bfrom my (time|years) (at|in|with) (your|the)\\b"
     },
-    "prompt": "Du skriver delarna till ett kort personligt brev åt Alex. Sidhuvud, rubrik, hälsning och underskrift läggs till automatiskt.\n\nSPRÅK: Skriv på {languageName}, samma språk som annonsen.\n\nOM ALEX:\n{profile}\n\nRÖST:\n{style}\n\nANNONSEN:\n{ad}\n\nVAD SOM LOCKAR MED JOBBET:\n{motivation}\n\nANNONSEN NÄMNER DISTANSARBETE: {remote}\n\nSvara med ENDAST ett JSON-objekt med fälten:\n\"inledning\": 2 meningar om vad Alex tar med sig till tjänsten.\n\"matchning\": 3 meningar om de två viktigaste kraven i annonsen och ett konkret exempel ur profilen. Finns ett avsnitt \"SAKNAS I FÖRHÅLLANDE TILL ANNONSEN\", säg det ärligt och visa närliggande erfarenhet.\n\"bidrag\": 2 meningar om vad Alex bidrar med utöver kraven.\n\"utveckling\": 1 till 2 meningar om vad Alex vill lära sig i tjänsten.\n\"avslutning\": 1 kort mening.\n\"tips\": högst 3 korta förslag på svenska om vad Alex kan lägga till.\n\nRegler: 150 till 220 ord totalt. Använd bara fakta ur profilen. Inga tankstreck. Inga klyschor som brinner för, passionerad eller drömjobb."
+    "prompt": "Du skriver delarna till ett kort personligt brev åt Alex. Sidhuvud, rubrik, hälsning och underskrift läggs till automatiskt.\n\nSPRÅK: Skriv på {languageName}, samma språk som annonsen.\n\nOM ALEX:\n{profile}\n\nRÖST:\n{style}\n\nANNONSEN:\n{ad}\n\nVAD SOM LOCKAR MED JOBBET:\n{motivation}\n\nANNONSEN NÄMNER DISTANSARBETE: {remote}\n\nSvara med ENDAST ett JSON-objekt med fälten:\n\"inledning\": 2 meningar om vad Alex tar med sig till tjänsten.\n\"matchning\": 3 meningar om de två viktigaste kraven i annonsen och ett konkret exempel ur profilen. Finns ett avsnitt \"SAKNAS I FÖRHÅLLANDE TILL ANNONSEN\", säg det ärligt och visa närliggande erfarenhet.\n\"bidrag\": 2 meningar om vad Alex bidrar med utöver kraven.\n\"utveckling\": 1 till 2 meningar om vad Alex vill lära sig i tjänsten.\n\"avslutning\": 1 kort mening.\n\"tips\": högst 3 korta förslag på svenska om vad Alex kan lägga till.\n\nRegler: 150 till 220 ord totalt. Använd bara fakta ur profilen. Inga tankstreck. Inga klyschor som brinner för, passionerad eller drömjobb.",
+    "answer": {
+      "_comment": "The JSON fields the prompt asks the model for, in letter order. field: a name, or names where the first present is used. honestSentence: the code's sentence about missing skills goes first here. list: several paragraphs. joke: a one-line field appended to the last of them. keepAsIs: skip the missing-skill and example checks.",
+      "paragraphs": [
+        {
+          "field": "inledning"
+        },
+        {
+          "field": "matchning",
+          "honestSentence": true
+        },
+        {
+          "field": [
+            "bidrag",
+            "exempel"
+          ],
+          "list": true,
+          "joke": "glimt"
+        },
+        {
+          "field": [
+            "intresse",
+            "motivation"
+          ],
+          "keepAsIs": true
+        },
+        {
+          "field": "utveckling"
+        },
+        {
+          "field": "avslutning"
+        }
+      ],
+      "tips": "tips"
+    },
+    "remoteWords": [
+      "ja",
+      "nej"
+    ],
+    "languageReminder": {
+      "en": "VIKTIGT OM SPRÅKET: Annonsen är på engelska. Skriv ALL text i JSON-fälten på engelska (brittisk stavning), även om fältnamnen är på svenska. Bara \"tips\" skrivs på svenska."
+    }
   }
 }

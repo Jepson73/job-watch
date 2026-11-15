@@ -90,11 +90,8 @@ const profile = profileFacts + gapSection + employerSection + extra;
 const remote = C.remoteRe ? RE(C.remoteRe).test(ad) : false;
 const motivation = (d.motivation || '').trim() || C.motivationDefault || '';
 
-// Models follow the last instruction best, and the Swedish JSON field names pull them towards Swedish.
-const REMINDER = {
-  en: 'VIKTIGT OM SPRÅKET: Annonsen är på engelska. Skriv ALL text i JSON-fälten på engelska (brittisk stavning), även om fältnamnen är på svenska. Bara "tips" skrivs på svenska.',
-};
-const reminder = C.languageReminder?.[language] ?? REMINDER[language] ?? '';
+// coverLetter.languageReminder[language] is appended at the very end of the prompt, where models follow it best
+const reminder = (C.languageReminder || {})[language] || '';
 
 const prompt = fill(C.prompt, {
   profile,
@@ -102,7 +99,8 @@ const prompt = fill(C.prompt, {
   ad,
   motivation,
   languageName: (C.languageNames || {})[language] || (language === 'en' ? 'engelska' : 'svenska'),
-  remote: remote ? 'ja' : 'nej'
+  // coverLetter.remoteWords: how {remote} reads in the prompt, e.g. ["ja", "nej"]
+  remote: (C.remoteWords || ['yes', 'no'])[remote ? 0 : 1]
 }) + (reminder ? '\n\n' + reminder : '');
 
 return [{ json: {

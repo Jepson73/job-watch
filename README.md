@@ -44,7 +44,7 @@ Schedule (hourly 07-11) / Manual
 → Plan trips                                              which travel times are missing from the cache
 → Car trips → Car → Save car                              OpenRouteService
 → Transit trips → Transit → Save transit                  ResRobot (depart at, or arrive by)
-→ Flight trips → Transit from Arlanda → Save flight       weekly commuting by air
+→ Flight trips → Transit from airport → Save flight       weekly commuting by air
 → Attach travel times → Compose email → Daily thought → Add thought → Send email
 ```
 
@@ -65,6 +65,8 @@ config.example/             A made-up person and shared settings
 
 ## Profiles (`/private/people/<id>.json`)
 
+**The code is the same for everyone; everything that differs between people, languages or places is in their profile.** Search terms, filters, scoring, travel, airports, email and letter texts, prompts, and the rules that check and clean the model's text all live in the JSON file. What stays in the code are facts about the data source: how JobTech's organisation numbers identify municipalities and regions, that salaries are in kronor, and recognising Swedish and English text.
+
 | Section | Controls |
 |---|---|
 | `home`, `email` | Home position (distances, travel) and recipient |
@@ -73,9 +75,9 @@ config.example/             A made-up person and shared settings
 | `jobs.filter` | Topic areas (at least one must match), rejected titles, driving licence, degree requirements, employment forms, occupation field, max distance |
 | `jobs.matching.profile` | Text the ads are compared with |
 | `jobs.ranking` | Weight of the profile match, scoring rules, how many ads to send |
-| `jobs.travel` | Car, public transport (`depart` at a time, or `arrive` before work starts), flights via Arlanda |
+| `jobs.travel` | Car, public transport (`depart` at a time, or `arrive` before work starts), the `weekday` travel times are for (1 = Monday), and `flight` for weekly commuting by air (see below) |
 | `jobs.email` | Groups by travel time, texts, labels, cover letter form link |
-| `jobs.thought` | Prompt and themes for the daily thought (`{theme}`, `{earlier}`) |
+| `jobs.thought` | Prompt and themes for the daily thought (`{theme}`, `{earlier}`), `replacements` applied to it, and `rejectRe`: a thought matching it (e.g. words in the wrong language) is skipped that day |
 
 `_global.json` holds shared settings: sender, embedding endpoint, form base URL, and **test mode**: `testTo` sends every email there instead, and `testPerson` limits manual runs to one person.
 
@@ -103,9 +105,18 @@ Score = 100 × (`matchWeight` × profile match + Σ `weight` × rule value). Pro
 
 With `"mode": "arrive"` public transport is searched as *arrive by*. With `fromAd: true` the ad text is scanned for working hours ("kl. 9-17", "arbetstid 07.00–16.00", "dagtid 8-17") and the earliest start is used; otherwise `time`. Arrival is `marginMin` before that, and the email says which assumption was used.
 
+### Weekly commuting by air
+
+```json
+"flight": { "label": "Arlanda", "airport": { "lat": 59.6519, "lon": 17.9186 }, "trainFrom": { "lat": 59.6497, "lon": 17.9286 },
+            "maxKmFromAirport": 120, "departAt": "07:00", "fixedMinutes": 155 }
+```
+
+Jobs within `maxKmFromAirport` of `airport` get a flight option: public transport from `trainFrom` (the airport's station) at `departAt`, plus `fixedMinutes` for getting there by air from home. Leave `flight` out if the person doesn't fly.
+
 ### Email language
 
-The fixed wording of the email (labels like "Publicerad", "Sista ansökningsdag") is in the `STRINGS` table at the top of `nodes/job-watch/14_compose_email.js`, Swedish by default. Override any entry with `"strings": { ... }` in `_global.json`.
+The fixed wording of the email (labels like "Publicerad", "Sista ansökningsdag") is in the `STRINGS` table at the top of `nodes/job-watch/14_compose_email.js`, Swedish by default. Override any entry with `"strings": { ... }` in `_global.json` (everyone) or in `jobs.email.strings` (one person).
 
 ## Cover letter
 
@@ -120,6 +131,7 @@ The model writes; the code makes sure it stays honest:
 
 - **Gaps are stated, not hidden.** When the ad asks for something the profile lacks (`gaps`), the prompt says so and the model must say it plainly. For specific skills (`missingSkills`), the model may not write about them at all: the code removes any sentence that mentions one and inserts its own honest sentence instead ("Azure har jag ännu inte arbetat med."), so that sentence is always true.
 - **Unbacked claims are removed.** Sentences claiming a system, law or tool from `unknownTerms` that the profile doesn't contain are dropped (unless they say the person does *not* have it), and the person is told.
+- **No invented connections.** Claims of knowing the employer or the place ("en kommun jag känner väl", "I know your organisation") are removed unless the employer is listed in the person's `previousEmployers`; only the claim is cut, the rest of the sentence stays. Applies to the tips too. The patterns are `cleanup.familiarityRe`; leave it out to turn the check off.
 - **Filler is cleaned.** Dashes, clichés and hedges ("jag tror att", "passionerad", "ser fram emot" outside the closing) are rewritten or removed. Person-specific rules live in `cleanup.replacements`.
 - **Wrong field, no letter.** With `outOfField`, an ad for a different occupation gets a short note instead of a letter that would have to invent experience.
 - **The ad's language decides the letter's.** With `detectLanguage`, English ads get English letters. The email around the letter stays Swedish.
@@ -136,7 +148,11 @@ The person always gets a draft to read and change, with warnings ("Kontrollera")
 | `missingSkills` | Skills with a regex each, the gap text, and the honest sentences per language |
 | `previousEmployers` | Regex on the employer name and a text to use when applying there again |
 | `extraSections` | Text added when the ad matches (`ifAd`) or doesn't match (`unlessAd`) a regex |
-| `unknownTerms`, `outOfField`, `cleanup`, `strings` | See above; `strings` overrides the email wording |
+| `unknownTerms`, `outOfField` | See above |
+| `cleanup` | All text rules, in order: `normalize` (every text), `replacements` (letter paragraphs; scope `notLast`/`last`), `dropSentencesRe`, `closingRe` (a closing is present, otherwise a fallback is added), `negationRe`, `familiarityRe`, `glimtExamples` |
+| `answer` | The JSON fields the prompt asks the model for, in letter order (which one gets the honest sentence, which may hold several paragraphs or a joke line) |
+| `languageReminder`, `remoteWords`, `adLabels` | Text appended to the prompt per language, how `{remote}` reads, and the labels of the ad text the model gets |
+| `strings`, `letterTexts` | The email's wording, and the letter's greeting, closing and fallback per language |
 
 ## Setup details
 
@@ -155,7 +171,7 @@ n8n does not read a `.env` file for this project. API keys are stored as **crede
 
 | Credential | n8n type | Fields | Used by | Get it from |
 |---|---|---|---|---|
-| ResRobot | Query Auth | Name `key`, Value: your API key | *Transit*, *Transit from Arlanda* | [Trafiklab](https://www.trafiklab.se/api/our-apis/resrobot-v21/) (free) |
+| ResRobot | Query Auth | Name `key`, Value: your API key | *Transit*, *Transit from airport* | [Trafiklab](https://www.trafiklab.se/api/our-apis/resrobot-v21/) (free) |
 | OpenRouteService | Header Auth | Name `Authorization`, Value: your API key | *Car* | [openrouteservice.org](https://openrouteservice.org/) (free) |
 | Ollama | Ollama | Base URL, e.g. `http://ollama:11434` | *Thought model*, *Letter model* | Your Ollama instance (or another provider's credential) |
 | SMTP | SMTP | User, password, host, port, SSL/TLS | *Send email* (both workflows) | Your mail provider. Gmail: `smtp.gmail.com`, port 465, SSL on, and an [app password](https://support.google.com/accounts/answer/185833) |
@@ -197,7 +213,7 @@ With a cloud provider, the person's profile, the ads and the letter drafts are s
 1. Create the credentials and pull the Ollama models listed above, or connect another provider.
 2. Copy `config.example/` to a private folder on the n8n host, e.g. `~/n8n-private/people/`, and edit `_global.json` and one file per person (`<id>.json`).
 3. Mount the folder and set the container settings above, then restart n8n.
-4. `python3 build.py --no-state`, import `out/job-watch-no-state.json` and `out/cover-letter.json`, and pick your credentials in the *Car*, *Transit*, *Transit from Arlanda*, *Thought model*, *Letter model* and *Send email* nodes.
+4. `python3 build.py --no-state`, import `out/job-watch-no-state.json` and `out/cover-letter.json`, and pick your credentials in the *Car*, *Transit*, *Transit from airport*, *Thought model*, *Letter model* and *Send email* nodes.
 5. Activate **Cover letter** (forms only work when the workflow is active). Run **Job watch** manually with `testTo` set, check the emails, then activate it and clear `testTo`.
 
 ## Test
